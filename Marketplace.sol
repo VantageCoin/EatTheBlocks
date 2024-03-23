@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
+
 pragma solidity ^0.8.20;
 
-import "./Homework.sol";
+import {Homework} from "./Homework.sol";
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 
 interface ERC721Interface {
@@ -11,17 +12,16 @@ interface ERC721Interface {
 
 contract Marketplace is Homework {
 
-
     event TokenAdded(string symbol, address seller, uint256 deadline);
     event TokenSold(string symbol, address seller, address buyer);
-
 
     error AuctionEnded();
     error AuctionHasNotEnded();
     error BidTooLow();
 
-
     address public owner;
+
+    // bid + token one struct
 
     struct Token {
         string symbol;
@@ -46,15 +46,15 @@ contract Marketplace is Homework {
     }
 
     //add token to auction
+    // address + tokenid hash instead of symbol
 
     function addTokenToAuction(string memory _symbol, uint _deadline, uint tokenid, uint _price, address _tokenContractAddress) external {
          // Verify if the token contract address is ERC721 compliant
         ERC721Interface tokenContract = ERC721Interface(_tokenContractAddress);
-        require(tokenContract.ownerOf(1) != address(0), "Not ERC721");
+        require(tokenContract.ownerOf(tokenid) == msg.sender, "Seller does not own token");
+        // check that sender owns the token & is an erc721 token
 
-          // Transfer the token to the buyer
-        tokenContract.transferFrom(t.seller, address(this), t.tokenid);
-
+        tokenContract.transferFrom(msg.sender, address(this), tokenid);
         
         Token memory t = Token(_symbol, _deadline, _price, msg.sender, tokenid);
         tokensForSale[_symbol] = t;
@@ -112,26 +112,25 @@ contract Marketplace is Homework {
         uint ownershare = b.bidprice / 100;
         uint sellershare = b.bidprice - ownershare;
 
-        ERC721Interface tokenContract = ERC721Interface(_tokenContractAddress);
+        // seller can send nft to another address
+        // transfer from seller to contract at start to prevent seller from re-selling nft
 
-          // Transfer the token to the buyer
+        // Transfer the token to the buyer
+        ERC721Interface tokenContract = ERC721Interface(b.buyer);
         tokenContract.transferFrom(address(this), b.buyer, t.tokenid);
 
-        
         //Send Seller $$
-        t.seller.call{value: sellershare}("");
-        
+       (bool success1, ) = t.seller.call{value: sellershare}("");
+       require(success1,"Seller share failed");
+        //check if succeeded
 
 
         //send Owner $$
-        owner.call{value: ownershare}("");     
+        (bool success2, ) = owner.call{value: ownershare}("");   
+        require(success2, "Ownwer share failed");
+        //  
 
         emit TokenSold(_symbol,t.seller, b.buyer);
-    }
-
-     
-      function proof() external pure override returns (bytes32) {
-        return keccak256("I have done this homework myself");
     }
 
 }
